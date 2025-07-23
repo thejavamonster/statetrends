@@ -73,7 +73,14 @@ async def get_all_trends():
 def generate_map():
     state_trends = asyncio.run(get_all_trends())
     unique_trends = list(set(state_trends.values()))
-    colors = generate_colors(len(unique_trends))
+    colors = px.colors.qualitative.Set3 * ((len(unique_trends) // len(px.colors.qualitative.Set3)) + 1)
+
+    # Handle colorscale
+    if len(unique_trends) == 1:
+        colorscale = [[0, colors[0]], [1, colors[0]]]
+    else:
+        colorscale = [[i/(len(unique_trends)-1), colors[i]] for i in range(len(unique_trends))]
+
 
     fig = go.Figure()
     fig.add_trace(go.Choropleth(
@@ -104,3 +111,5 @@ def generate_map():
     )
 
     return fig
+
+generate_map()
