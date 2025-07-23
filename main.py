@@ -1,11 +1,5 @@
-import asyncio
-import aiohttp
-import feedparser
-import plotly.graph_objects as go
-import plotly.express as px
-import random
+import aiohttp, asyncio, feedparser, random
 
-# State coordinates for labels
 state_coords = {
     "AL": [32.806671, -86.791130], "AK": [61.370716, -152.404419],
     "AZ": [33.729759, -111.431221], "AR": [34.969704, -92.373123],
@@ -41,10 +35,10 @@ headers = {
 
 async def fetch_trend(session, state_code):
     url = f"https://trends.google.com/trending/rss?geo=US-{state_code}"
-    for attempt in range(3):
-        await asyncio.sleep(random.uniform(0.3, 0.6))
+    for _ in range(3):
+        await asyncio.sleep(random.uniform(1.0, 2.0))
         try:
-            async with session.get(url, headers=headers, timeout=10) as response:
+            async with session.get(url, headers=headers) as response:
                 text = await response.text()
                 feed = feedparser.parse(text)
                 if feed.entries:
@@ -56,50 +50,11 @@ async def fetch_trend(session, state_code):
 async def get_all_trends():
     trends = {}
     async with aiohttp.ClientSession() as session:
-        tasks = [fetch_trend(session, state) for state in state_coords]
+        tasks = [fetch_trend(session, code) for code in state_coords.keys()]
         results = await asyncio.gather(*tasks)
         for code, trend in results:
             trends[code] = trend
     return trends
 
-def generate_map():
-    state_trends = asyncio.run(get_all_trends())
-    if not state_trends:
-        raise Exception("Failed to fetch any trends")
-
-    unique_trends = [t for t in set(state_trends.values()) if t != "No data"]
-    if not unique_trends:
-        unique_trends = ["Placeholder"]
-
-    colors = px.colors.qualitative.Set3 * ((len(unique_trends) // len(px.colors.qualitative.Set3)) + 1)
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Choropleth(
-        locations=list(state_trends.keys()),
-        z=[unique_trends.index(state_trends[s]) if state_trends[s] in unique_trends else -1 for s in state_trends],
-        locationmode='USA-states',
-        colorscale=[[i/(len(unique_trends)-1 if len(unique_trends)>1 else 1), colors[i]] for i in range(len(unique_trends))],
-        showscale=False,
-        hovertext=[f"{s}: {state_trends[s]}" for s in state_trends],
-        hoverinfo='text'
-    ))
-
-    for code, trend in state_trends.items():
-        lat, lon = state_coords[code]
-        label = trend if len(trend) <= 14 else trend[:14] + "…"
-        fig.add_trace(go.Scattergeo(
-            lon=[lon], lat=[lat],
-            text=label,
-            mode='text',
-            textfont=dict(size=10, color='black', family="Arial Black")
-        ))
-
-    fig.update_layout(
-        geo=dict(scope='usa'),
-        title_text='Top Google Trend by State',
-        margin=dict(l=0, r=0, t=50, b=0),
-        paper_bgcolor='white'
-    )
-
-    return fig.to_html(full_html=False)
+def fetch_trends():
+    return asyncio.run(get_all_trends())
