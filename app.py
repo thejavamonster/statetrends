@@ -7,14 +7,16 @@ app = Flask(__name__)
 
 @app.route("/")
 def index():
-    fig = generate_map()  # This runs your async fetch + map build
+    fig = generate_map()
     html = pio.to_html(fig, full_html=False)
-    return render_template_string(f"""
+    return render_template_string("""
     <html>
       <head><title>Trending Map</title></head>
-      <body>{html}</body>
+      <body>{{ plot_div|safe }}</body>
     </html>
-    """)
+    """, plot_div=html)
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
