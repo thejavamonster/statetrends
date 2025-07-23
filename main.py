@@ -2,10 +2,10 @@ import asyncio
 import aiohttp
 import feedparser
 import plotly.graph_objects as go
-import colorsys
+import plotly.express as px
 import random
 
-# State coordinates (for text placement)
+# State coordinates for labels
 state_coords = {
     "AL": [32.806671, -86.791130], "AK": [61.370716, -152.404419],
     "AZ": [33.729759, -111.431221], "AR": [34.969704, -92.373123],
@@ -39,23 +39,12 @@ headers = {
     "Accept-Language": "en-US,en;q=0.9"
 }
 
-# Generate unique, vibrant colors
-def generate_colors(n):
-    colors = []
-    for i in range(n):
-        hue = i / n
-        lightness = 0.5
-        saturation = 0.8
-        r, g, b = colorsys.hls_to_rgb(hue, lightness, saturation)
-        colors.append(f'rgb({int(r*255)}, {int(g*255)}, {int(b*255)})')
-    return colors
-
 async def fetch_trend(session, state_code):
     url = f"https://trends.google.com/trending/rss?geo=US-{state_code}"
-    for attempt in range(3):  # Retry up to 3 times
-        await asyncio.sleep(random.uniform(0.5, 1.2))  # Slow down a bit to avoid blocks
+    for attempt in range(3):
+        await asyncio.sleep(random.uniform(0.3, 0.6))
         try:
-            async with session.get(url, headers=headers) as response:
+            async with session.get(url, headers=headers, timeout=10) as response:
                 text = await response.text()
                 feed = feedparser.parse(text)
                 if feed.entries:
@@ -65,31 +54,34 @@ async def fetch_trend(session, state_code):
     return state_code, "No data"
 
 async def get_all_trends():
+    trends = {}
     async with aiohttp.ClientSession() as session:
-        tasks = [fetch_trend(session, code) for code in state_coords.keys()]
+        tasks = [fetch_trend(session, state) for state in state_coords]
         results = await asyncio.gather(*tasks)
-    return dict(results)
+        for code, trend in results:
+            trends[code] = trend
+    return trends
 
 def generate_map():
     state_trends = asyncio.run(get_all_trends())
-    unique_trends = list(set(state_trends.values()))
+    if not state_trends:
+        raise Exception("Failed to fetch any trends")
+
+    unique_trends = [t for t in set(state_trends.values()) if t != "No data"]
+    if not unique_trends:
+        unique_trends = ["Placeholder"]
+
     colors = px.colors.qualitative.Set3 * ((len(unique_trends) // len(px.colors.qualitative.Set3)) + 1)
 
-    # Handle colorscale
-    if len(unique_trends) == 1:
-        colorscale = [[0, colors[0]], [1, colors[0]]]
-    else:
-        colorscale = [[i/(len(unique_trends)-1), colors[i]] for i in range(len(unique_trends))]
-
-
     fig = go.Figure()
+
     fig.add_trace(go.Choropleth(
         locations=list(state_trends.keys()),
-        z=[unique_trends.index(state_trends[code]) for code in state_trends],
+        z=[unique_trends.index(state_trends[s]) if state_trends[s] in unique_trends else -1 for s in state_trends],
         locationmode='USA-states',
-        colorscale=[[i/(len(unique_trends)-1), colors[i]] for i in range(len(unique_trends))],
+        colorscale=[[i/(len(unique_trends)-1 if len(unique_trends)>1 else 1), colors[i]] for i in range(len(unique_trends))],
         showscale=False,
-        hovertext=[f"{code}: {state_trends[code]}" for code in state_trends],
+        hovertext=[f"{s}: {state_trends[s]}" for s in state_trends],
         hoverinfo='text'
     ))
 
@@ -110,6 +102,4 @@ def generate_map():
         paper_bgcolor='white'
     )
 
-    return fig
-
-generate_map()
+    return fig.to_html(full_html=False)
